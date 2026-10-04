@@ -1,0 +1,16 @@
+{% macro num(p, values, prefix='', compact=false) -%}
+  <div class="field">
+    <label for="{{ prefix }}{{ p.key }}">{{ p.label }}{% if p.unit %}<span class="muted small">（{{ p.unit|trim }}）</span>{% endif %}</label>
+    <input type="number" id="{{ prefix }}{{ p.key }}" name="{{ prefix }}{{ p.key }}"
+           min="{{ p.min }}" max="{{ p.max }}" step="{{ p.step }}"
+           value="{{ values.get(prefix ~ p.key, p.default) }}" required>
+    <div class="help">{{ p.min }}〜{{ p.max }}{% if p.help %}。{{ p.help }}{% endif %}</div>
+  </div>
+{%- endmacro %}
+
+{% macro small_num(p, values, prefix='') -%}
+  <input type="number" id="{{ prefix }}{{ p.key }}" name="{{ prefix }}{{ p.key }}"
+         min="{{ p.min }}" max="{{ p.max }}" step="{{ p.step }}"
+         value="{{ values.get(prefix ~ p.key, p.default) }}" required
+         title="{{ p.label }}（{{ p.min }}〜{{ p.max }}）">
+{%- endmacro %}

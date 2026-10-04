@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import num %}
+{% block title %}推論 - YOLO26 追加学習{% endblock %}
+{% block content %}
+<h1>推論</h1>
+<p class="muted">学習したモデルで画像や動画の物体を検出します。結果はラベル付きでデータセットに取り込めるので、「推論 → 修正 → 追加学習」の繰り返しでラベル付けを楽にできます。</p>
+
+<section class="panel">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('predict_run') }}" id="predict-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="fields">
+      <div class="field" style="grid-column: span 2">
+        <label for="model">モデル</label>
+        <select id="model" name="model" required>
+          {% for path, label in models %}
+            <option value="{{ path }}" {% if path == selected %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% for p in predict_params %}{{ num(p, {}) }}{% endfor %}
+    </div>
+    <div class="field">
+      <label for="files">画像（複数可・{{ max_images }} 枚まで）または動画 1 本（{{ max_video_mb }}MB まで）</label>
+      <input type="file" id="files" name="files" multiple required
+             accept=".jpg,.jpeg,.png,.bmp,.webp,.tif,.tiff,.mp4,.avi,.mov,.mkv,.webm">
+      <div class="help">画像はその場で処理します。動画はバックグラウンドで 1 フレームずつ処理します（CPU では時間がかかります）</div>
+    </div>
+    <button class="btn" type="submit" id="predict-btn" {% if not models %}disabled{% endif %}>推論する</button>
+    <span class="small muted" id="predict-status"></span>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>最近の結果</h2>
+  {% if results %}
+    <table>
+      <tr><th>結果</th><th>種類</th><th>件数</th></tr>
+      {% for r in results %}
+        <tr>
+          <td><a href="{{ url_for('predict_result', name=r.name) }}">{{ r.name }}</a></td>
+          <td>{{ '画像' if r.kind == 'images' else '動画' }}</td>
+          <td>{% if r.kind == 'images' %}{{ r.count }} 枚{% elif not r.done %}<span class="badge running">処理中</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="muted">まだありません。</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MAX_VIDEO = {{ max_video_mb }} * 1024 * 1024;
+document.getElementById('predict-form').addEventListener('submit', (e) => {
+  const files = [...document.getElementById('files').files];
+  const video = files.find((f) => /\.(mp4|avi|mov|mkv|webm)$/i.test(f.name));
+  if (video && video.size > MAX_VIDEO) {
+    e.preventDefault();
+    document.getElementById('predict-status').textContent =
+      `動画は {{ max_video_mb }}MB までです（選択中: ${(video.size / 1024 / 1024).toFixed(0)}MB）`;
+    return;
+  }
+  document.getElementById('predict-btn').disabled = true;
+  document.getElementById('predict-status').textContent = '処理中です。画像が多いと少し時間がかかります…';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% block title %}{{ r.name }} - YOLO26 追加学習{% endblock %}
+{% block content %}
+<a class="small" href="{{ url_for('index') }}">← 一覧へ</a>
+<div class="row spread">
+  <h1>{{ r.name }} <span class="badge {{ r.status }}" id="status">{{ r.status_label }}</span></h1>
+  <div class="row">
+    {% if r.status == 'running' %}
+      <form method="post" action="{{ url_for('run_stop', run=r.name) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn danger" type="submit">停止</button>
+      </form>
+    {% endif %}
+    {% if r.can_resume %}
+      <form method="post" action="{{ url_for('run_resume', run=r.name) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn" type="submit" {% if active_job %}disabled{% endif %}>続きから再開</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% if r.meta.dataset %}
+  <p class="muted">データセット: <a href="{{ url_for('dataset_page', name=r.meta.dataset) }}">{{ r.meta.dataset }}</a>
+  {% if r.meta.settings %}・出発点: {{ r.meta.settings.weights or r.meta.settings.model }}{% endif %}
+  {% if r.meta.augmented_images %}・事前の水増し画像 {{ r.meta.augmented_images }} 枚{% endif %}</p>
+{% endif %}
+
+{% if r.error %}<div class="flash error">エラー: {{ r.error }}</div>{% endif %}
+
+<section class="panel">
+  <div class="row spread"><strong id="phase">{{ r.phase_text }}</strong><span id="percent">{{ r.percent }}%</span></div>
+  <div class="progress" style="margin:8px 0 16px"><div id="bar" style="width: {{ r.percent }}%"></div></div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="m-map50">{{ '%.3f' % r.metrics['mAP50'] if r.metrics['mAP50'] is not none else '—' }}</div><div class="k">mAP50（最新）</div></div>
+    <div class="stat"><div class="v" id="m-map">{{ '%.3f' % r.metrics['mAP50-95'] if r.metrics['mAP50-95'] is not none else '—' }}</div><div class="k">mAP50-95（最新）</div></div>
+    <div class="stat"><div class="v" id="m-p">{{ '%.3f' % r.metrics['precision'] if r.metrics['precision'] is not none else '—' }}</div><div class="k">適合率 Precision</div></div>
+    <div class="stat"><div class="v" id="m-r">{{ '%.3f' % r.metrics['recall'] if r.metrics['recall'] is not none else '—' }}</div><div class="k">再現率 Recall</div></div>
+    <div class="stat"><div class="v" id="m-best">{{ r.best_epoch or '—' }}</div><div class="k">ベストのエポック</div></div>
+  </div>
+  <p class="small muted">mAP は 0〜1 で、1 に近いほど正確です。mAP50 は枠が半分以上重なれば正解とみなした値、mAP50-95 はより厳しい基準の平均です。best.pt はベストのエポックの重みです。</p>
+  <svg class="chart" id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+  <div class="small"><span class="swatch" style="background:#2f6fde"></span>mAP50　<span class="swatch" style="background:#1f8a4c"></span>mAP50-95　<span class="swatch" style="background:#c0362c"></span>box_loss（学習の損失、右軸相当で正規化）</div>
+</section>
+
+<div class="grid2">
+  <section class="panel">
+    <h2>④ 結果のモデル</h2>
+    {% if r.has_best %}
+      <div class="row">
+        <a class="btn" href="{{ url_for('run_weights', run=r.name, kind='best') }}">best.pt をダウンロード</a>
+        {% if r.has_last %}<a class="btn secondary" href="{{ url_for('run_weights', run=r.name, kind='last') }}">last.pt</a>{% endif %}
+        <a class="btn secondary" href="{{ url_for('predict_page', model=r.name) }}">このモデルで推論</a>
+      </div>
+      <h3 id="export">別の形式で書き出す</h3>
+      <form method="post" action="{{ url_for('run_export', run=r.name) }}" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="format" style="max-width:420px">
+          {% for key, label in export_formats %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn secondary" type="submit" {% if active_job %}disabled{% endif %}>書き出し</button>
+      </form>
+      <p class="small muted">初回は必要なライブラリを自動でインストールするため、時間がかかります。</p>
+      {% if r.exports %}
+        <table>
+          {% for fmt, e in r.exports.items() %}
+            <tr>
+              <td>{{ fmt|upper }}</td>
+              <td>
+                {% if e.status == 'finished' %}<a href="{{ url_for('run_export_file', run=r.name, filename=e.file) }}">{{ e.file }} をダウンロード</a>
+                {% elif e.status == 'running' %}<span class="badge running">書き出し中</span>
+                {% else %}<span class="badge failed">失敗</span> <span class="small">{{ e.error }}</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% endif %}
+    {% else %}
+      <p class="muted">学習が 1 エポック終わると best.pt ができます。</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>設定</h2>
+    {% set st = r.meta.settings or {} %}
+    {% if st %}
+      <table class="small">
+        <tr><th>エポック / 画像サイズ / バッチ</th><td>{{ st.epochs }} / {{ st.imgsz }} / {{ st.batch }}</td></tr>
+        <tr><th>早期終了</th><td>{{ st.patience }} エポック</td></tr>
+        <tr><th>検証用の割合</th><td>{{ st.val_percent }}%{% if not st.auto_split %}（既存の分割を使用）{% endif %}</td></tr>
+        <tr><th>学習中の水増し</th><td>{% for k, v in (st.online or {}).items() %}{{ k }}={{ v }} {% endfor %}</td></tr>
+        <tr><th>事前の水増し</th><td>{% if st.offline and st.offline.copies %}1 枚あたり {{ st.offline.copies }} 枚:
+          {% for k, v in st.offline.items() if k.endswith('_p') and v %}{{ k[:-2] }} {{ v }}% {% endfor %}{% else %}なし{% endif %}</td></tr>
+      </table>
+    {% else %}
+      <p class="muted">コマンドラインから実行した学習です。</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if r.plots %}
+<section class="panel">
+  <h2>グラフと検証画像</h2>
+  <div class="grid2">
+    {% for f, label in r.plots %}
+      <figure style="margin:0">
+        <a href="{{ url_for('run_plot', run=r.name, filename=f) }}" target="_blank"><img src="{{ url_for('run_plot', run=r.name, filename=f) }}" alt="{{ label }}" style="width:100%;border-radius:6px;border:1px solid var(--line)"></a>
+        <figcaption class="small muted">{{ label }}</figcaption>
+      </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>ログ</h2>
+  <pre class="log" id="log">読み込み中…</pre>
+</section>
+
+<section class="panel danger-zone">
+  <h2>学習結果を削除</h2>
+  <form method="post" action="{{ url_for('run_delete', run=r.name) }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="confirm" placeholder="確認のため「{{ r.name }}」と入力" style="max-width:320px" required>
+    <button class="btn danger" type="submit">削除</button>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const RUN_API = {{ url_for('api_run', run=r.name)|tojson }};
+const INITIAL_STATUS = {{ r.status|tojson }};
+</script>
+<script src="{{ url_for('static', filename='run.js') }}"></script>
+{% endblock %}

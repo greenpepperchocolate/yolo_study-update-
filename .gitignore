@@ -148,4 +148,17 @@ Thumbs.db
 runs/
 *.mp4
 *_data.yaml
-*.pt    # Model weights (optional, if not committing)
+# Model weights
+*.pt
+*_ncnn_model/
+
+# Local datasets (keep only the empty skeleton)
+datasets/*
+!datasets/my_dataset/
+datasets/my_dataset/**/*.*
+!datasets/my_dataset/**/.gitkeep
+!datasets/my_dataset/classes.txt
+
+
+# Web app
+webapp/.secret_key

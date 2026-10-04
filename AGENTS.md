@@ -4,7 +4,7 @@
 - **Install**: `pip install -r requirements.txt`
 - **Train**: `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names>`
 - **Inference**: `python scripts/inference.py --model <model-path> --input <image/video/webcam>`
-- **Streamlit App**: `streamlit run streamlit_app.py`
+- **Web App (Flask)**: `.venv\Scripts\python webapp\app.py` (or `run_webapp.bat`)
 - **Lint**: No linter configured - use `python -m py_compile` for syntax check
 - **Test**: No test framework configured - manually test scripts
 - **Format**: No formatter configured - follow PEP 8 manually

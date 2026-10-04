@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>データセットと学習</h1>
+<p class="muted">① データセットを作る → ② 画像とラベルをアップロード（またはブラウザでラベル付け）→ ③ 水増しなどを設定して学習 → ④ 結果を確認して推論・書き出し</p>
+
+<div class="grid2">
+  <section class="panel">
+    <h2>データセット</h2>
+    {% if datasets %}
+      <table>
+        <tr><th>名前</th><th>画像</th><th>ラベル済み</th><th>未ラベル</th><th>クラス</th></tr>
+        {% for d in datasets %}
+          <tr>
+            <td><a href="{{ url_for('dataset_page', name=d.name) }}">{{ d.name }}</a></td>
+            <td>{{ d.images }}</td>
+            <td>{{ d.labeled }}</td>
+            <td>{% if d.unlabeled %}<span class="badge stopped">{{ d.unlabeled }}</span>{% else %}0{% endif %}</td>
+            <td>{{ d.classes }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p class="muted">まだデータセットがありません。右のフォームから作成してください。</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>新しいデータセットを作る</h2>
+    <form method="post" action="{{ url_for('dataset_create') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="name">データセット名</label>
+        <input type="text" id="name" name="name" required maxlength="40"
+               placeholder="例: 部品検査">
+        <div class="help">40 文字以内。文字・数字・「_」「-」が使えます（日本語可）</div>
+      </div>
+      <div class="field">
+        <label for="classes">クラス名（1 行に 1 つ・あとからでも可）</label>
+        <textarea id="classes" name="classes" rows="4" placeholder="傷&#10;汚れ&#10;欠け"></textarea>
+        <div class="help">上から順にクラス番号 0, 1, 2… になります。zip に data.yaml / classes.txt があれば自動で読み込みます</div>
+      </div>
+      <button class="btn" type="submit">作成する</button>
+    </form>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="row spread"><h2>学習の履歴</h2><a href="{{ url_for('predict_page') }}">推論へ →</a></div>
+  {% if runs %}
+    <table>
+      <tr><th>学習名</th><th>データセット</th><th>状態</th><th>進み具合</th><th>mAP50</th><th>mAP50-95</th></tr>
+      {% for r in runs %}
+        <tr>
+          <td><a href="{{ url_for('run_page', run=r.name) }}">{{ r.name }}</a></td>
+          <td>{{ r.meta.dataset or '—' }}</td>
+          <td><span class="badge {{ r.status }}">{{ r.status_label }}</span></td>
+          <td style="min-width:140px">
+            <div class="progress"><div style="width: {{ r.percent }}%"></div></div>
+            <span class="small muted">{{ r.epochs_done }} / {{ r.epochs }} エポック</span>
+          </td>
+          <td>{{ '%.3f' % r.metrics['mAP50'] if r.metrics['mAP50'] is not none else '—' }}</td>
+          <td>{{ '%.3f' % r.metrics['mAP50-95'] if r.metrics['mAP50-95'] is not none else '—' }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="muted">まだ学習していません。</p>
+  {% endif %}
+</section>
+{% endblock %}

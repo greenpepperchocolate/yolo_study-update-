@@ -18,12 +18,46 @@ def download_dataset(dataset_handle):
         logging.error(f"Failed to download dataset: {e}")
         raise
 
+def resolve_device(device):
+    """Return a usable device, falling back to CPU when no GPU exists."""
+    if device != 'auto':
+        return device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return '0'
+    except ImportError:
+        pass
+    logging.info("No CUDA GPU found, training on CPU")
+    return 'cpu'
+
+def load_class_names(dataset_path):
+    """Read class names from data.yaml or classes.txt in a local dataset."""
+    for yaml_name in ('data.yaml', 'data.yml'):
+        yaml_file = os.path.join(dataset_path, yaml_name)
+        if os.path.exists(yaml_file):
+            with open(yaml_file, encoding='utf-8') as f:
+                names = (yaml.safe_load(f) or {}).get('names')
+            if isinstance(names, dict):
+                names = [names[k] for k in sorted(names)]
+            if names:
+                logging.info(f"Loaded class names from {yaml_file}")
+                return list(names)
+    classes_file = os.path.join(dataset_path, 'classes.txt')
+    if os.path.exists(classes_file):
+        with open(classes_file, encoding='utf-8') as f:
+            names = [line.strip() for line in f if line.strip()]
+        if names:
+            logging.info(f"Loaded class names from {classes_file}")
+            return names
+    return None
+
 def detect_dataset_structure(dataset_path):
     """Detect train/val/test images and labels paths in the dataset."""
     paths = {}
     subdirs = [d for d in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, d))]
     logging.info(f"Detected subdirs in dataset: {subdirs}")
-    splits = ['train', 'valid', 'test']
+    splits = ['train', 'valid', 'val', 'test']
     for split in splits:
         key_split = 'val' if split == 'valid' else split
         if split in subdirs:
@@ -93,13 +127,13 @@ def create_yaml(dataset_path, paths, nc, names):
         "nc": nc,
         "names": names,
     }
-    yaml_path = f"{os.path.basename(dataset_path)}.yaml"
-    with open(yaml_path, "w") as f:
-        yaml.dump(data_yaml, f)
+    yaml_path = f"{os.path.basename(dataset_path)}_data.yaml"
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        yaml.dump(data_yaml, f, allow_unicode=True)
     logging.info(f"Created YAML config at: {yaml_path}")
     return yaml_path
 
-def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=None, resume=False, base_model="yolov8m.pt"):
+def train_model(yaml_path, epochs, imgsz, batch, device, project, name, weights=None, resume=False, base_model="yolo26n.pt"):
     """Train the YOLO model."""
     if resume:
         # Resume from last checkpoint
@@ -164,28 +198,36 @@ def export_to_ncnn(model_path, output_path='model_ncnn'):
     logging.info(f"Model exported to NCNN: {output_path}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Train YOLO on any Kaggle dataset")
-    parser.add_argument('--dataset', required=True,
+    parser = argparse.ArgumentParser(
+        description="Train YOLO on a Kaggle dataset or a local folder")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument('--dataset',
                         help='Kaggle dataset handle, e.g., '
                              'jocelyndumlao/multi-weather-pothole-detection-mwpd')
-    parser.add_argument('--nc', type=int, required=True,
-                        help='Number of classes')
-    parser.add_argument('--names', required=True,
-                        help='Class names, comma separated, e.g., "Potholes,Cracks"')
+    source.add_argument('--data-dir',
+                        help='Local dataset folder with train/ and valid/ '
+                             '(each containing images/ and labels/)')
+    parser.add_argument('--nc', type=int, default=None,
+                        help='Number of classes (default: len(names))')
+    parser.add_argument('--names', default=None,
+                        help='Class names, comma separated, e.g., '
+                             '"Potholes,Cracks". With --data-dir, read from '
+                             'data.yaml or classes.txt when omitted')
     parser.add_argument('--epochs', type=int, default=60,
                         help='Number of training epochs')
     parser.add_argument('--imgsz', type=int, default=512,
                         help='Image size')
     parser.add_argument('--batch', type=int, default=32,
                         help='Batch size')
-    parser.add_argument('--device', default='0',
-                        help='Device to use, e.g., 0 for GPU, cpu for CPU')
+    parser.add_argument('--device', default='auto',
+                        help='Device to use, e.g., 0 for GPU, cpu for CPU, '
+                             'auto to pick GPU when available')
     parser.add_argument('--project', default='runs/train',
                         help='Project directory for runs')
     parser.add_argument('--name', default='yolo_train',
                         help='Experiment name')
-    parser.add_argument('--model', type=str, default='yolov8m.pt',
-                        help='Base model to train from (default: yolov8m.pt). '
+    parser.add_argument('--model', type=str, default='yolo26n.pt',
+                        help='Base model to train from (default: yolo26n.pt). '
                              'Examples: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt, yolov8x.pt, '
                              'yolo11n.pt, yolo11s.pt, yolo11m.pt, yolo11l.pt, yolo11x.pt, '
                              'yolo26n.pt, yolo26s.pt, yolo26m.pt, yolo26l.pt, yolo26x.pt')
@@ -206,7 +248,24 @@ def main():
                         help='Export trained model to NCNN format')
 
     args = parser.parse_args()
-    names = [n.strip() for n in args.names.split(',')]
+    if not args.resume and not (args.dataset or args.data_dir):
+        parser.error('one of --dataset or --data-dir is required')
+    names = None
+    if args.names:
+        names = [n.strip() for n in args.names.split(',')]
+    elif args.data_dir:
+        names = load_class_names(args.data_dir)
+    if not args.resume and not names:
+        parser.error('--names is required (or put data.yaml / classes.txt '
+                     'in the --data-dir folder)')
+    if names and args.nc is None:
+        args.nc = len(names)
+    if names and args.nc != len(names):
+        parser.error(f'--nc ({args.nc}) does not match the number of '
+                     f'names ({len(names)})')
+    args.device = resolve_device(args.device)
+    # Ultralytics nests relative projects under its runs_dir setting
+    args.project = os.path.abspath(args.project)
 
     # Check for conflicting arguments
     if args.resume and args.weights:
@@ -233,7 +292,12 @@ def main():
                 if ckpt and 'epoch' in ckpt and 'train_args' in ckpt:
                     current_epoch = ckpt['epoch']
                     target_epochs = ckpt.get('train_args', {}).get('epochs', 0)
-                    if current_epoch >= target_epochs:
+                    # Finished runs are saved with epoch=-1 and no optimizer
+                    finished = (current_epoch < 0
+                                or ckpt.get('optimizer') is None)
+                    if finished:
+                        current_epoch = target_epochs
+                    if finished or current_epoch >= target_epochs:
                         print("\n" + "="*70)
                         print("Training already completed for this run!")
                         print("="*70)
@@ -253,8 +317,15 @@ def main():
                                     args.device, args.project, args.name, weights=None,
                                     resume=True, base_model=args.model)
         else:
-            dataset_path = download_dataset(args.dataset)
-            logging.info(f"Dataset downloaded to: {dataset_path}")
+            if args.data_dir:
+                dataset_path = os.path.abspath(args.data_dir)
+                if not os.path.isdir(dataset_path):
+                    raise FileNotFoundError(
+                        f"Dataset folder not found: {dataset_path}")
+                logging.info(f"Using local dataset: {dataset_path}")
+            else:
+                dataset_path = download_dataset(args.dataset)
+                logging.info(f"Dataset downloaded to: {dataset_path}")
             paths, dataset_path = detect_dataset_structure(dataset_path)
             if not paths:
                 raise ValueError("No standard train/val/test structure found in dataset")

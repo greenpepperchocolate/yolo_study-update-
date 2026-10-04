@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}ラベル付け - {{ name }}{% endblock %}
+{% block body_class %}wide{% endblock %}
+{% block content %}
+<style>
+  .anno { display: grid; grid-template-columns: 250px 1fr 260px; gap: 16px; align-items: start; }
+  .anno .side { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .anno .list { max-height: 72vh; overflow: auto; font-size: .82rem; }
+  .anno .list div { padding: 3px 6px; border-radius: 5px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .anno .list div.cur { background: var(--accent-soft); font-weight: 700; }
+  .anno .list .st { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .st.labeled { background: var(--ok); } .st.background { background: #9aa3b5; } .st.unlabeled { background: var(--warn); }
+  .stage-wrap { background: #2a2f3a; border-radius: var(--radius); padding: 10px; display: flex; justify-content: center; }
+  .stage { position: relative; user-select: none; cursor: crosshair; line-height: 0; }
+  .stage img { max-width: 100%; max-height: 74vh; display: block; }
+  .stage .b { position: absolute; border: 2px solid; box-sizing: border-box; }
+  .stage .b.sel { border-width: 3px; box-shadow: 0 0 0 2px #fff; }
+  .stage .b span { position: absolute; left: -2px; top: -18px; font-size: 11px; line-height: 16px; color: #fff; padding: 0 4px; white-space: nowrap; }
+  .classes { max-height: 38vh; overflow: auto; }
+  .classes button { display: block; width: 100%; text-align: left; margin-bottom: 4px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; cursor: pointer; }
+  .classes button.cur { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+  .keys { font-size: .78rem; color: var(--muted); }
+  @media (max-width: 1000px) { .anno { grid-template-columns: 1fr; } .anno .list { max-height: 200px; } }
+</style>
+
+<div class="row spread">
+  <div><a class="small" href="{{ url_for('dataset_page', name=name) }}">← {{ name }} へ戻る</a>
+  <h1>ラベル付け <span class="small muted" id="title"></span></h1></div>
+  <div class="row">
+    <span class="small" id="save-state"></span>
+    <button class="btn secondary" id="prev">← 前へ</button>
+    <button class="btn" id="save">保存（S）</button>
+    <button class="btn secondary" id="next">次へ →</button>
+  </div>
+</div>
+
+<div class="anno">
+  <div class="side">
+    <select id="filter" style="margin-bottom:8px">
+      <option value="all">すべて</option>
+      <option value="unlabeled">ラベル未作成</option>
+      <option value="labeled">ラベル付き</option>
+      <option value="background">物体なし</option>
+    </select>
+    <div class="small muted" id="counts"></div>
+    <div class="list" id="list"></div>
+  </div>
+
+  <div class="stage-wrap"><div class="stage" id="stage"><img id="img" alt="" draggable="false"></div></div>
+
+  <div class="side">
+    <h3 style="margin-top:0">クラス（数字キーで切替）</h3>
+    <div class="classes" id="classes"></div>
+    <h3>この画像の枠 <span id="box-count"></span></h3>
+    <div id="boxes" class="small"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn secondary small" id="no-objects">物体なしとして保存（N）</button>
+      <button class="btn danger small" id="delete-image">画像を削除</button>
+    </div>
+    <h3>操作</h3>
+    <div class="keys">
+      ドラッグ: 枠を描く<br>
+      枠をクリック: 選択 → 数字キーでクラス変更<br>
+      Delete / Backspace: 選択中の枠を消す<br>
+      S: 保存　D / →: 次へ　A / ←: 前へ（未保存なら自動保存）<br>
+      N: 枠をすべて消して「物体なし」で保存<br>
+      多角形のラベルは枠（矩形）として表示され、保存すると矩形になります
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const DATASET = {{ name|tojson }};
+const CLASSES = {{ classes|tojson }};
+const START = {{ start|tojson }};
+const URLS = {
+  images: {{ url_for('api_images', name=name)|tojson }},
+  label: {{ url_for('api_get_label', name=name)|tojson }},
+  del: {{ url_for('api_delete_image', name=name)|tojson }},
+  image: {{ url_for('dataset_image', name=name, split='__S__', filename='__F__')|tojson }},
+};
+</script>
+<script src="{{ url_for('static', filename='annotate.js') }}"></script>
+{% endblock %}

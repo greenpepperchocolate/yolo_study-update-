@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}{{ name }} - 推論結果{% endblock %}
+{% block content %}
+<a class="small" href="{{ url_for('predict_page') }}">← 推論へ</a>
+<div class="row spread">
+  <h1>{{ name }}</h1>
+  <div class="row">
+    {% if info %}<a class="btn secondary" href="{{ url_for('predict_download', name=name) }}">zip でダウンロード</a>{% endif %}
+    <form method="post" action="{{ url_for('predict_delete', name=name) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn danger small" type="submit">この結果を削除</button>
+    </form>
+  </div>
+</div>
+
+{% if not info %}
+  <section class="panel">
+    <strong id="video-phase">動画を処理しています…</strong>
+    <div class="progress" style="margin:10px 0"><div id="video-bar" style="width:0"></div></div>
+    <form method="post" action="{{ url_for('job_stop') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn danger small" type="submit">停止</button>
+    </form>
+    <pre class="log" id="video-log" style="margin-top:12px"></pre>
+  </section>
+{% elif info.kind == 'video' %}
+  <section class="panel">
+    {% if info.browser_playable %}
+      <video src="{{ url_for('predict_file', name=name, kind='video', filename='result.mp4') }}" controls style="width:100%;border-radius:8px"></video>
+    {% else %}
+      <p class="flash warning">ffmpeg が見つからないため、ブラウザで再生できない形式で保存しました。ダウンロードして再生してください。</p>
+    {% endif %}
+    <div class="row" style="margin-top:10px">
+      <a class="btn" href="{{ url_for('predict_file', name=name, kind='video', filename='result.mp4', download=1) }}">動画をダウンロード</a>
+      <span class="muted">{{ info.frames }} フレーム</span>
+    </div>
+    {% if info.counts %}
+      <h3>検出数（全フレームの合計）</h3>
+      <table>{% for k, v in info.counts|dictsort(by='value', reverse=true) %}<tr><td>{{ k }}</td><td>{{ v }}</td></tr>{% endfor %}</table>
+    {% endif %}
+  </section>
+{% else %}
+  <section class="panel">
+    <p class="muted">信頼度 {{ info.conf }} 以上・画像サイズ {{ info.imgsz }}・{{ info['items']|length }} 枚</p>
+    {% for f, reason in info.skipped %}<div class="flash warning">スキップ: {{ f }} — {{ reason }}</div>{% endfor %}
+    <form method="post" action="{{ url_for('predict_import', name=name) }}" id="import-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="thumbs" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr))">
+        {% for item in info['items'] %}
+          <div>
+            <a class="thumb" href="{{ url_for('predict_file', name=name, kind='annotated', filename=item.annotated) }}" target="_blank">
+              <img loading="lazy" src="{{ url_for('predict_file', name=name, kind='annotated', filename=item.annotated) }}" alt="">
+            </a>
+            <label class="check small" style="font-weight:400">
+              <input type="checkbox" name="selected" value="{{ item.input }}" checked>
+              {{ item.input }} — {{ item.detections|length }} 件
+            </label>
+            {% if item.detections %}
+              <div class="small muted">{% for d in item.detections[:6] %}{{ d.name }} {{ '%.2f' % d.conf }}{% if not loop.last %}、{% endif %}{% endfor %}{% if item.detections|length > 6 %} …{% endif %}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <h3>データセットに取り込む</h3>
+      <p class="small muted">チェックした画像と検出結果（ラベル）をデータセットに追加します。取り込んだ後はラベル付け画面で間違いを直してから追加学習してください。データセットのクラス名はモデルと同じである必要があります（未登録なら自動で登録します）。</p>
+      <div class="row">
+        <select name="dataset" style="max-width:320px" required>
+          {% for d in datasets %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+        </select>
+        <button class="btn" type="submit" {% if not datasets %}disabled{% endif %}>取り込む</button>
+      </div>
+    </form>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not info %}
+<script>
+(function poll() {
+  api({{ url_for('api_predict', name=name)|tojson }}).then((r) => {
+    const p = r.progress || {};
+    if (r.done) { window.location.reload(); return; }
+    if (p.phase === 'failed' || p.phase === 'stopped') {
+      document.getElementById('video-phase').textContent =
+        p.phase === 'failed' ? `失敗しました: ${p.error || ''}` : '停止しました';
+    } else {
+      if (p.total) {
+        document.getElementById('video-bar').style.width = `${(p.done / p.total) * 100}%`;
+        document.getElementById('video-phase').textContent = `処理中 ${p.done} / ${p.total} フレーム`;
+      }
+      setTimeout(poll, 2000);
+    }
+    document.getElementById('video-log').textContent = r.log;
+  }).catch(() => setTimeout(poll, 5000));
+})();
+</script>
+{% endif %}
+{% endblock %}

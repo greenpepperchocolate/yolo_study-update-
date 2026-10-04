@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import num, small_num %}
+{% block title %}{{ s.name }} - YOLO26 追加学習{% endblock %}
+{% block content %}
+<div class="row spread">
+  <div>
+    <a class="small" href="{{ url_for('index') }}">← 一覧へ</a>
+    <h1>{{ s.name }}</h1>
+  </div>
+  <div class="row">
+    <a class="btn secondary" href="{{ url_for('annotate_page', name=s.name) }}">ブラウザでラベル付け</a>
+    <a class="btn" href="#train">学習の設定へ</a>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="stats">
+    <div class="stat"><div class="v">{{ s.total_images }}</div><div class="k">画像</div></div>
+    <div class="stat"><div class="v">{{ s.total_labeled }}</div><div class="k">ラベル付き</div></div>
+    <div class="stat"><div class="v">{{ s.total_unlabeled }}</div><div class="k">ラベル未作成</div></div>
+    <div class="stat"><div class="v">{{ s.splits.train.background + s.splits.valid.background }}</div><div class="k">物体なし</div></div>
+    <div class="stat"><div class="v">{{ s.splits.train.boxes + s.splits.valid.boxes }}</div><div class="k">枠の数</div></div>
+    <div class="stat"><div class="v">{{ s.splits.train.images }} / {{ s.splits.valid.images }}</div><div class="k">学習用 / 検証用</div></div>
+  </div>
+  {% if warnings or s.problems or s.out_of_range %}
+    <div style="margin-top:14px">
+      {% for w in warnings %}<div class="flash warning">{{ w }}</div>{% endfor %}
+      {% if s.out_of_range %}
+        <div class="flash error">登録されたクラス数を超える番号のラベル: {{ s.out_of_range[:5]|join('、') }}{% if s.out_of_range|length > 5 %} ほか {{ s.out_of_range|length - 5 }} 件{% endif %}</div>
+      {% endif %}
+      {% for p in s.problems[:5] %}<div class="flash error">{{ p }}</div>{% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+<div class="grid2">
+  <section class="panel" id="upload">
+    <h2>① 画像とラベルをアップロード</h2>
+    <form id="upload-form" method="post" enctype="multipart/form-data"
+          action="{{ url_for('dataset_upload', name=s.name) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="dropzone" id="dropzone">
+        <strong>ここにファイルやフォルダをドロップ</strong><br>
+        <span class="muted small">またはクリックして選択（複数可）</span>
+        <input type="file" id="file-input" name="files" multiple hidden
+               accept=".jpg,.jpeg,.png,.bmp,.webp,.tif,.tiff,.txt,.zip,.yaml,.yml">
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button type="button" class="btn secondary small" id="pick-folder">フォルダを選ぶ</button>
+        <span class="small muted" id="picked">未選択</span>
+      </div>
+      <input type="file" id="folder-input" webkitdirectory hidden>
+      <div class="progress" id="upload-progress" style="margin-top:12px; display:none"><div style="width:0"></div></div>
+      <div class="small muted" id="upload-status"></div>
+      <button class="btn" type="submit" id="upload-btn" style="margin-top:12px" disabled>アップロード</button>
+    </form>
+    <h3>受け付けるもの</h3>
+    <ul class="list-plain small">
+      <li>画像: jpg / png / bmp / webp / tif（1 ファイル 50MB まで）</li>
+      <li>ラベル: 画像と同じ名前の YOLO 形式 <code>.txt</code>（<code>クラス番号 中心x 中心y 幅 高さ</code>、0〜1 の値）</li>
+      <li>zip: 上記をまとめたもの。Roboflow の「YOLO26 / YOLOv8」書き出しはそのまま使えます</li>
+      <li><code>classes.txt</code> / <code>data.yaml</code>: クラス名が未登録なら読み込みます</li>
+      <li>1 回 {{ max_files }} ファイル・{{ max_upload_gb }}GB まで。同じ名前は上書き</li>
+      <li>ラベルがない画像は、<a href="{{ url_for('annotate_page', name=s.name) }}">ラベル付け画面</a>で枠を付けられます</li>
+    </ul>
+  </section>
+
+  <section class="panel" id="classes">
+    <h2>② クラス名</h2>
+    <form method="post" action="{{ url_for('dataset_classes', name=s.name) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <textarea name="classes" rows="6" required placeholder="1 行に 1 つ">{{ s.classes|join('\n') }}</textarea>
+        <div class="help">1〜100 個、各 50 文字以内、重複不可。上から順にクラス番号 0, 1, 2… に対応するので、途中を消すと番号がずれます（使用中の番号より少なくはできません）</div>
+      </div>
+      <button class="btn" type="submit">クラスを保存</button>
+    </form>
+    {% if s.classes %}
+      <div style="max-height:320px;overflow:auto;margin-top:14px">
+      <table>
+        <tr><th>番号</th><th>クラス</th><th>枠の数</th></tr>
+        {% for c in s.classes %}
+          <tr><td>{{ loop.index0 }}</td><td><span class="swatch" data-cls="{{ loop.index0 }}"></span>{{ c }}</td><td>{{ s.class_counts[loop.index0] }}</td></tr>
+        {% endfor %}
+      </table>
+      </div>
+    {% endif %}
+  </section>
+</div>
+
+{% if s.preview %}
+<section class="panel">
+  <div class="row spread">
+    <h2>プレビュー（先頭 {{ s.preview|length }} 枚）</h2>
+    <a href="{{ url_for('annotate_page', name=s.name) }}">すべて見る・修正する →</a>
+  </div>
+  <div class="thumbs">
+    {% for p in s.preview %}
+      <a class="thumb" href="{{ url_for('annotate_page', name=s.name, file=p.split ~ '/' ~ p.file) }}" title="{{ p.file }}">
+        <img loading="lazy" src="{{ url_for('dataset_image', name=s.name, split=p.split, filename=p.file, thumb=1) }}" alt="">
+        {% for b in p.boxes %}
+          <span class="box" data-cls="{{ b.cls }}" style="left:{{ b.left }}%;top:{{ b.top }}%;width:{{ b.width }}%;height:{{ b.height }}%"></span>
+        {% endfor %}
+        <span class="tag">{{ '検証' if p.split == 'valid' else '学習' }}{% if p.unlabeled %}・未ラベル{% endif %}</span>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel" id="train">
+  <h2>③ 学習の設定</h2>
+  {% if blockers %}
+    {% for b in blockers %}<div class="flash error">{{ b }}</div>{% endfor %}
+  {% endif %}
+  <form method="post" action="{{ url_for('dataset_train', name=s.name) }}" id="train-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <fieldset>
+      <legend>基本</legend>
+      <div class="fields">
+        <div class="field">
+          <label for="run_name">学習名</label>
+          <input type="text" id="run_name" name="run_name" value="{{ run_name }}" required maxlength="40">
+          <div class="help">結果の保存先 runs/train/学習名。既存の名前は使えません</div>
+        </div>
+        <div class="field">
+          <label for="model">出発点のモデル</label>
+          <select id="model" name="model">
+            <optgroup label="YOLO26 の事前学習モデルから">
+              {% for key, label in params.MODELS %}
+                <option value="base:{{ key }}" {% if values.model == 'base:' ~ key %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </optgroup>
+            {% if runs_for_weights %}
+              <optgroup label="これまでの学習結果に追加学習">
+                {% for r in runs_for_weights %}
+                  <option value="run:{{ r.name }}" {% if values.model == 'run:' ~ r.name %}selected{% endif %}>{{ r.name }}{% if r.meta.dataset %}（{{ r.meta.dataset }}）{% endif %}</option>
+                {% endfor %}
+              </optgroup>
+            {% endif %}
+          </select>
+          <div class="help">初回は yolo26n。精度を上げたいときは学習済みの結果を選んで続けて学習</div>
+        </div>
+        {% for p in params.TRAIN_PARAMS %}{{ num(p, values) }}{% endfor %}
+      </div>
+      <label class="check"><input type="checkbox" name="auto_split" {% if values.auto_split %}checked{% endif %}> 学習用と検証用を自動で分け直す（上の「検証用の割合」で分割）</label>
+      <div class="help">外すと、アップロード時の train / valid の分け方をそのまま使います</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>水増し A: 学習中にかける水増し（Ultralytics 標準）</legend>
+      <p class="small muted">毎エポック、画像にランダムな変形をかけます。ディスクは使いません。</p>
+      <div class="presets row" style="margin-bottom:10px">
+        <span class="small">プリセット:</span>
+        {% for key, label in [('standard','標準'),('light','弱め'),('strong','強め'),('none','なし')] %}
+          <button type="button" class="btn secondary small" data-preset="{{ key }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+      <div class="fields">
+        {% for p in params.ONLINE_AUG_PARAMS %}{{ num(p, values, 'on_') }}{% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>水増し B: 水増し画像を事前に作る（グレースケールなど）</legend>
+      <p class="small muted">学習用画像から変換済みのコピーを作って学習に加えます。検証用には混ぜません。各変換は設定した確率でかかり、組み合わさります。</p>
+      {{ num(params.OFFLINE_COPIES, values, 'off_') }}
+      <table class="aug-table">
+        <tr><th>変換</th><th>確率（%）</th><th>強さ</th><th></th></tr>
+        {% for t in params.OFFLINE_TRANSFORMS %}
+          <tr>
+            <td><strong>{{ t.label }}</strong></td>
+            <td>{{ small_num(t.prob, values, 'off_') }}</td>
+            <td>
+              {% for o in t.options %}
+                <div class="small">{{ o.label }}</div>{{ small_num(o, values, 'off_') }}
+                <span class="small muted">{{ o.min }}〜{{ o.max }}{{ o.unit }}</span>
+              {% endfor %}
+            </td>
+            <td class="small muted">{{ t.help }}{% for o in t.options %}{% if o.help %} {{ o.help }}{% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+      </table>
+      <div class="row" style="margin-top:12px">
+        <button type="button" class="btn secondary" id="preview-btn">水増しの見本を表示</button>
+        <span class="small muted" id="preview-status">「1 枚あたりの水増し枚数」が 0 でも見本は表示できます</span>
+      </div>
+      <div class="thumbs" id="preview-images" style="margin-top:12px"></div>
+    </fieldset>
+
+    <button class="btn" type="submit" {% if blockers %}disabled{% endif %}>学習を開始</button>
+    {% if active_job %}<span class="small muted">　※ 実行中の処理が終わるまで開始できません</span>{% endif %}
+  </form>
+</section>
+
+<section class="panel danger-zone">
+  <h2>データセットを削除</h2>
+  <form method="post" action="{{ url_for('dataset_delete', name=s.name) }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="text" name="confirm" placeholder="確認のため「{{ s.name }}」と入力" style="max-width:320px" required>
+    <button class="btn danger" type="submit">画像・ラベルごと削除</button>
+  </form>
+  <p class="small muted">学習結果（runs/train）は削除されません。</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRESETS = {{ params.ONLINE_AUG_PRESETS|tojson }};
+const PREVIEW_URL = {{ url_for('augment_preview', name=s.name)|tojson }};
+</script>
+<script src="{{ url_for('static', filename='dataset.js') }}"></script>
+{% endblock %}

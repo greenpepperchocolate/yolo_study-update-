@@ -1,98 +1,410 @@
-# YOLO Training Template
+# YOLO26 追加学習 Web アプリ（Flask 版）
 
-This repository provides a template for training YOLO models on any Kaggle dataset and performing inference. It includes scripts for command-line use and a notebook-style script for interactive environments.
+自分の画像で YOLO26 を追加学習（ファインチューニング）するための、ブラウザ操作のツールです。
+画像のアップロード、枠のラベル付け、水増し、学習、結果の確認、推論、モデルの書き出しまでを、コマンドを打たずに行えます。
 
+- 動作環境：Windows（Python 3.11）。NVIDIA GPU がなくても CPU で動きます
+- 使う場所：**この PC だけ**（`127.0.0.1` で待ち受けます。ログイン機能はありません）
+- 元になったテンプレート：computer-vision-with-marco/yolo-training-template（Kaggle 専用の構成を、ローカルのデータで学習できるように作り直しています）
 
+## 目次
 
+1. [はじめて使う](#1-はじめて使う)
+2. [画面の流れ（基本の使い方）](#2-画面の流れ基本の使い方)
+3. [入力できる値と上限](#3-入力できる値と上限)
+4. [データの形式](#4-データの形式)
+5. [結果の見方](#5-結果の見方)
+6. [精度を上げるには](#6-精度を上げるには)
+7. [画像を追加して学習し直す](#7-画像を追加して学習し直す)
+8. [うまくいかないとき](#8-うまくいかないとき)
+9. [コマンドラインで使う](#9-コマンドラインで使う)
+10. [フォルダ構成](#10-フォルダ構成)
+11. [注意点](#11-注意点)
+12. [テスト](#12-テスト)
+13. [元のテンプレートからの変更点](#13-元のテンプレートからの変更点)
 
-https://github.com/user-attachments/assets/a953e6a4-c97b-4149-994d-188aeb5dd398
+---
 
+## 1. はじめて使う
 
+### 準備（その PC で最初の 1 回だけ）
+`setup.bat` をダブルクリックします。
 
+- `.venv` に Python の仮想環境を作り、必要なライブラリを入れます
+- NVIDIA GPU があれば GPU 版、なければ CPU 版の PyTorch が入ります
+- **すでに `.venv` フォルダがある PC では不要です**（この PC は実行済みなので、そのまま `run_webapp.bat` から使えます）
+- 必要になるのは、別の PC にコピーして使うとき、`.venv` を消した・壊れたとき、Git からクローンし直したときです。`.venv` は Git に入れていないので、これらの場合は作り直しが必要です
 
+### 起動と終了
+- **起動**：`run_webapp.bat` をダブルクリックします。黒い画面が開き、ブラウザで http://127.0.0.1:5000 が表示されます
+- **終了**：黒い画面を閉じます（または `Ctrl+C`）。**学習中に閉じると学習も止まります**
+- ポート番号を変えたいときは、環境変数 `PORT` を指定して起動します
 
-## Files
+---
 
-- [`scripts/main.py`](scripts/main.py): Command-line script for training YOLO on a Kaggle dataset, with options for preprocessing and model export.
-- [`scripts/inference.py`](scripts/inference.py): Command-line script for running inference with a trained model.
-- [`notebooks/yolo_template.ipynb`](notebooks/yolo_template.ipynb): Notebook template to run train a YOLO model and test it.
-- [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md): Contributing guidelines.
-- [`docs/streamlit_app.md`](docs/streamlit_app.md): Documentation for the Streamlit app.
-- [`example_datasets.md`](example_datasets.md): List of example Kaggle datasets for testing.
-- [`requirements.txt`](requirements.txt): Dependencies for the project.
-- [`streamlit_app.py`](streamlit_app.py): Streamlit web app for interactive model training and inference.
+## 2. 画面の流れ（基本の使い方）
 
-## Setup
-
-1. Install dependencies: `pip install -r requirements.txt`
-2. For training: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names>`
-3. For training with preprocessing: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names> --preprocess`
-4. For training with NCNN export: Run `python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names> --export-ncnn`
-5. For inference: Run `python scripts/inference.py --model <model-path> --input <image/video/webcam>`
-6. For the Streamlit app: Run `streamlit run streamlit_app.py`
-7. For non-technical setup: Please see [docs/QUICKSTART-GUIDE.md](docs/QUICKSTART-GUIDE.md)
-
-## Data Preprocessing
-
-The template includes optional data preprocessing capabilities for cleaning and augmenting your dataset:
-
-- **Data Cleaning**: Remove corrupted images, validate annotations, check bounding box validity
-- **Data Augmentation**: Apply various transformations (flips, rotations, color adjustments, noise) while properly updating YOLO labels
-
-### Preprocessing Options
-
-- `--preprocess`: Run cleaning and augmentation before training
-- `--augment-only`: Only run augmentation (creates augmented dataset without training)
-- `--preprocess-config`: Specify custom preprocessing configuration file (default: preprocessing_config.yaml)
-
-### Configuration
-
-Edit `preprocessing_config.yaml` to customize preprocessing behavior:
-
-```yaml
-cleaning:
-  remove_corrupted_images: true
-  validate_annotations: true
-  check_bbox_validity: true
-  min_bbox_size: 1
-  max_bbox_size_ratio: 0.9
-
-augmentation:
-  enabled: true
-  augment_factor: 2  # Number of augmented versions per image
-  transforms:
-    horizontal_flip:
-      p: 0.5  # Probability
-    # ... other transforms
+```
+① データセットを作る → ② 画像（とラベル）を入れる → ③ ラベル付け
+  → ④ 学習の設定と開始 → ⑤ 進み具合・結果を見る → ⑥ 推論・書き出し
 ```
 
-## Model Export
+### ① データセットを作る
+トップ画面右の「新しいデータセットを作る」で、次を入力します。
 
-The template supports exporting trained YOLO models to different formats for deployment on various platforms.
+- **データセット名**：40 文字以内。日本語も使えます
+- **クラス名**：検出したいものの名前を、1 行に 1 つ（例：`粗大ごみ`）。あとからでも入力できます
 
-### Export Options
+> クラス名の順番がクラス番号（0, 1, 2…）になります。あとから途中を消すと番号がずれるので、最初に決めておくのがおすすめです。
 
-- `--export-ncnn`: Export the trained model to NCNN format after training (suitable for edge hardware like mobile devices)
+### ② 画像（とラベル）を入れる
+データセット画面の「① 画像とラベルをアップロード」に、ファイルやフォルダをドロップして「アップロード」を押します。
 
-### Usage
+- **画像だけ**：枠は③で付けます
+- **ラベル付きのデータ**：画像と同じ名前の YOLO 形式 `.txt` も一緒に入れます。Roboflow の zip はそのまま使えます
+- 壊れた画像や形式の違うラベルは、理由を表示して取り込みません
+- 多角形（セグメンテーション）のラベルは、物体検出用の矩形に変換して取り込みます
+- 取り込み後は、学習用（train）と検証用（valid）にファイル名から自動で振り分けられます
 
-To train and export to NCNN:
+### ③ ラベル付け（ブラウザで枠を描く）
+データセット画面の「ブラウザでラベル付け」を開きます。
 
-```bash
-python scripts/main.py --dataset <kaggle-handle> --nc <num-classes> --names <class-names> --export-ncnn
+| 操作 | やり方 |
+|---|---|
+| 枠を描く | 画像の上でドラッグ |
+| クラスを選ぶ | 数字キー（`1`〜`9`）か、右のクラス一覧をクリック |
+| 描いた枠のクラスを変える | 枠をクリックして選び、数字キー |
+| 枠を消す | 枠をクリックして `Delete` / `Backspace` |
+| 保存 | `S` |
+| 次の画像 / 前の画像 | `D`・`→` / `A`・`←`（未保存の変更があれば自動で保存） |
+| 物体が写っていない画像 | `N`（枠をすべて消して「物体なし」として保存） |
+| 選択を外す | `Esc` |
+
+- 左上の絞り込みで「ラベル未作成」を選ぶと、残りの画像だけを順に処理できます
+- 一覧の ● は、緑＝ラベルあり、灰＝物体なし、橙＝未作成です。`[検]` は検証用の画像です
+- 枠が重なって見づらいときは、右の「この画像の枠」の一覧から選んで削除できます
+- **ラベルを付けた画像だけが学習に使われます**。未作成の画像は、学習時には「物体なし」として扱われます
+
+### ④ 学習の設定と開始
+データセット画面の「③ 学習の設定」で設定し、「学習を開始」を押します。
+
+**基本**
+- **学習名**：結果の保存先になります。既に使っている名前は使えません
+- **出発点のモデル**：初回は `YOLO26n`。2 回目以降は、前回の学習結果を選ぶと追加学習になります
+- **エポック数**：学習を繰り返す回数。最初は 50 前後で十分です
+- **画像サイズ・バッチサイズ**：迷ったらそのままで構いません（メモリ不足で落ちるときはバッチを下げます）
+- **学習用と検証用を自動で分け直す**：チェックを入れたままにします（下の「検証用の割合」で分割します）
+
+**水増し A：学習中にかける水増し（Ultralytics 標準）**
+毎エポック、画像にランダムな変形をかけます。ディスクは使いません。プリセット（標準・弱め・強め・なし）か、個別の値で設定します。
+
+**水増し B：水増し画像を事前に作る**
+- 「1 枚あたりの水増し枚数」を 1 以上にすると有効になります（0 なら作りません）
+- 変換ごとに、かかる確率（%）と強さを設定します
+
+| 変換 | 内容 |
+|---|---|
+| 左右反転・上下反転 | 反転 |
+| 回転 | 最大角度の範囲でランダムに回転 |
+| 拡大縮小 | 指定の幅で拡大・縮小 |
+| 明るさ・コントラスト | 明るさと濃淡を変える |
+| 色相・彩度 | 色合いを変える |
+| **グレースケール** | 白黒にする。100% にすると、水増し画像がすべて白黒になる |
+| ぼかし・ノイズ・JPEG 圧縮の劣化 | 画質を落とす |
+| 一部の塗りつぶし | 物体が一部隠れても検出できるようにする |
+
+- 「水増しの見本を表示」で、今の設定のかかり具合を学習前に確認できます（枠もいっしょに変換されて表示されます）
+- 事前に作った画像は**学習用だけ**に加わり、検証用には混ぜません（評価が甘くならないようにするためです）
+- 学習のたびに、その学習の `augmented/` フォルダに作り直されます
+
+入力値が範囲外だったり、ラベル付きの画像がなかったりすると、赤いメッセージが出て開始できません。
+
+### ⑤ 進み具合・結果を見る
+開始すると学習画面に切り替わります（トップ画面の「学習の履歴」からも開けます）。
+
+- 進捗バー・mAP のグラフ・ログが自動で更新されます
+- **停止**：押すと学習を止めます。**続きから再開**で、止めたところから再開できます
+- **best.pt をダウンロード**：一番成績の良かった時点のモデルです
+- **別の形式で書き出す**：ONNX / NCNN（スマホ・ラズパイ向け）/ TorchScript（初回は必要なライブラリを自動で入れるので時間がかかります）
+- グラフと検証画像：学習曲線、混同行列、PR 曲線、F1 曲線、ラベルの分布、検証画像（正解と予測）、水増し後の学習画像
+
+### ⑥ 推論（実際に検出してみる）
+学習画面の「このモデルで推論」か、上部メニューの「推論」から使います。
+
+1. モデルを選び、画像（100 枚まで）か動画（1 本・500MB まで）を選んで「推論する」を押します
+2. 結果の画像・動画を確認します。zip でダウンロードもできます
+3. 動画は 1 フレームずつ処理するので、CPU では時間がかかります（進み具合が表示されます）
+4. 「データセットに取り込む」で、検出結果をラベル付きで追加できます（[7 章](#7-画像を追加して学習し直す)）
+
+---
+
+## 3. 入力できる値と上限
+
+### アップロード
+| 項目 | 上限 |
+|---|---|
+| 1 回のファイル数 | 5000 |
+| 1 回の合計サイズ | 2GB |
+| 1 ファイル | 50MB |
+| zip 内のファイル数 / 展開後のサイズ | 20000 / 4GB |
+| 受け付ける画像 | jpg / jpeg / png / bmp / webp / tif / tiff |
+
+### 名前など
+| 項目 | 制限 |
+|---|---|
+| データセット名・学習名 | 40 文字以内。文字・数字・`_`・`-`（日本語可）。先頭は `-` 以外。Windows の予約名（CON など）は不可 |
+| クラスの数 | 1〜100 |
+| クラス名 | 50 文字以内。重複不可。`, < > : " / \ \| ? *` は使えません |
+
+### 学習
+| 項目 | 範囲 |
+|---|---|
+| エポック数 | 1〜1000 |
+| 画像サイズ | 320〜1280（32 の倍数） |
+| バッチサイズ | 1〜64 |
+| 早期終了 | 1〜1000 エポック（検証スコアがこの回数改善しなければ打ち切る） |
+| 検証用の割合 | 5〜50% |
+| 水増し A の各値 | 項目ごとに範囲あり（入力欄の下に表示） |
+| 水増し B の水増し枚数 | 1 枚あたり 0〜10 枚（全体で 20000 枚まで） |
+| 水増し B の各確率 | 0〜100% |
+
+### 推論
+| 項目 | 範囲 |
+|---|---|
+| 画像 | 1 回 100 枚まで |
+| 動画 | 1 本・500MB まで（mp4 / avi / mov / mkv / webm） |
+| 信頼度のしきい値 | 0.01〜1 |
+| 画像サイズ | 320〜1280（32 の倍数） |
+
+範囲を外れた値は、画面にどの項目が悪いかが表示されて、実行されません。
+
+---
+
+## 4. データの形式
+
+### フォルダの形
+```
+datasets/<データセット名>/
+├── classes.txt        クラス名（1 行に 1 つ）
+├── dataset.json       検証用の割合などの設定（自動で作られます）
+├── train/
+│   ├── images/        学習用の画像
+│   └── labels/        画像と同じ名前の .txt
+└── valid/
+    ├── images/        検証用の画像（学習に使わず、評価だけに使う）
+    └── labels/
 ```
 
-### Streamlit App
+### ラベル（`.txt`）の書き方
+物体 1 つにつき 1 行です。数字はすべて**画像の幅・高さで割った 0〜1 の値**です。
 
-The Streamlit app includes an "Export" page where you can upload a trained model and export it to NCNN format for download.
+```
+<クラス番号> <中心x> <中心y> <幅> <高さ>
+0 0.512 0.430 0.210 0.180
+```
 
-### Notes on NCNN
+- 画像と**同じ名前**にします（`a.jpg` に対して `a.txt`）
+- 物体が 1 つもない画像は、空の `.txt`（または未作成）にします
+- 0〜1 の範囲外の値、列数の違い、負のクラス番号は、取り込み時にはじかれます
 
-- NCNN is optimized for mobile and embedded devices, providing efficient inference with low latency.
-- Exported models include `.param` and `.bin` files in a directory (e.g., `model_ncnn/`).
-- Use ONNX Runtime or NCNN's inference engine for deployment.
+### 取り込みのルール
+- **同じ名前のファイルを別々のアップロードで送る**と、上書きされます
+- **1 回のアップロードの中で、別のフォルダに同じ名前**（`train/images/a.jpg` と `valid/images/a.jpg` など）があれば、後のほうに `_valid` のようにフォルダ名を付けて、両方残します。画像とラベルの組み合わせも保たれます
+- `classes.txt` か `data.yaml` を入れると、クラス名が未登録のときに読み込みます
+- 画像とラベルの数が合わないものは、データセット画面の警告に出ます
 
-## Contributing
+---
 
-We welcome contributions! Please see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines on how to contribute, report issues, and run the notebook on Google Colab.
+## 5. 結果の見方
 
+### 主な指標
+| 指標 | 見方 |
+|---|---|
+| **mAP50** | 0〜1。枠が半分以上重なれば正解とした精度。1 に近いほど良い |
+| **mAP50-95** | 0〜1。枠の位置まで厳しく見た精度（基準を段階的に上げた平均）。mAP50 より低くなるのが普通 |
+| **適合率 Precision** | 「ある」と出したもののうち、本当にあった割合。低いと誤検出が多い |
+| **再現率 Recall** | 実際にあるもののうち、見つけられた割合。低いと見逃しが多い |
+| **ベストのエポック** | `best.pt` がどのエポックのものか |
+
+目安（クラスや用途で変わります）：mAP50 が 0.5 台なら「動くが粗い」、0.7〜0.8 なら「実用になり始める」、0.9 以上なら「かなり良い」です。
+
+### 損失（loss）の読み方
+- **box_loss**：枠の位置のずれ。学習側と検証側の両方がだんだん下がるのが理想です
+- **cls_loss**：クラスの間違い（1 クラスだけなら「ある・なし」の判定の誤り）
+- **学習側だけ下がって検証側が下がらない（または上がる）**と、学習データに慣れすぎた「過学習」です。エポックを増やすより、データを増やしてください
+
+### グラフと画像
+| 画像 | 見るポイント |
+|---|---|
+| 学習曲線（results.png） | 損失や mAP の推移。検証の mAP が横ばいなら、これ以上エポックを増やしても効きません |
+| 混同行列 | どのクラスをどのクラスと間違えたか。右下の列・行（background）が多いと、見逃しや誤検出が多い |
+| PR 曲線・F1 曲線 | しきい値をどこにするとよいかの目安。F1 が最大になる信頼度が、バランスの良いしきい値 |
+| ラベルの分布 | クラスごとの数、枠の大きさと位置の偏り |
+| 検証画像（正解）と（予測） | **見比べると、何を見逃し、何を誤検出したかが分かります。いちばん参考になります** |
+| 学習画像（水増し後） | 水増しが変になっていないかの確認 |
+
+### 評価の数字を見るときの注意
+- **検証用の画像が少ない**（数十枚以下）と、1〜2 個の検出が変わるだけで mAP が大きく動きます。数字は目安として見てください
+- 検証用に、学習用と**ほとんど同じ写真**（同じ写真の別サイズなど）が入っていると、数字が実際より良く出ます
+- 画像を追加すると検証用も増えるため、前回の mAP とは厳密には比べられません。同じ画像での見え方を見比べるのも有効です
+
+### 学習の保存先（`runs/train/<学習名>/`）
+| ファイル | 内容 |
+|---|---|
+| `weights/best.pt` | 最も成績が良かったときのモデル（普段はこれを使う） |
+| `weights/last.pt` | 最後のエポックのモデル（再開に使う） |
+| `results.csv` | エポックごとの数値 |
+| `web_run.json` | 設定と状態（この画面用） |
+| `web_job.log` | 学習のログ |
+| `augmented/` | 事前に作った水増し画像 |
+| `exports/` | 書き出したモデル |
+
+---
+
+## 6. 精度を上げるには
+
+効果が大きい順です。
+
+1. **画像を増やす**：まず 150〜300 枚が目標です。場所・天気・時間帯・角度・対象の種類を散らします
+2. **ラベルの付け方をそろえる**：「どこまでを 1 つとして囲むか」（山積みを 1 つにまとめるか、ばらすか）を決めて統一します。mAP50-95 が低いときは、枠のばらつきが原因のことが多いです
+3. **見逃しを減らしたいとき**：推論の「信頼度のしきい値」を 0.25 から 0.1〜0.15 に下げます（見逃しは減るが、誤検出は増えます）
+4. **「推論 → 修正 → 追加学習」を回す**：[7 章](#7-画像を追加して学習し直す)
+5. **水増しを調整する**：実際の使用環境に合わせます（白黒カメラで使うならグレースケールの確率を上げる、暗い場所で使うなら明るさを強めに、など）
+6. **モデルを大きくする**：YOLO26s などに上げる方法もありますが、CPU では時間がかかり、**データが少ないうちは効果が限られます**。後回しで構いません
+
+---
+
+## 7. 画像を追加して学習し直す
+
+最初からやり直す必要はありません。同じデータセットに足していきます。
+
+| 手順 | やること |
+|---|---|
+| 1 | データセット作成・クラス名は**不要**（今のデータセットをそのまま使う） |
+| 2 | 新しい画像だけをアップロード（既存と同じ名前にしない） |
+| 3 | ラベル付け画面で「ラベル未作成」に絞り、**新しい画像の分だけ**枠を付ける |
+| 4 | 学習名を新しくして学習を開始（前の学習結果は上書きされない） |
+
+- **学習用と検証用の振り分け**：ファイル名で決まるため、既存の画像の振り分けは変わりません。新しい画像だけが同じ割合で追加されます
+- **出発点のモデル**
+  - 前回の学習結果を選ぶ（追加学習）：早く収束します。エポックは 30 前後で足ります
+  - YOLO26n からやり直す：時間はかかりますが、新しいデータ全体で素直に学習できます。画像が 2 倍以上に増えたときや、前回の結果が悪かったときにおすすめです
+  - 迷ったら「前回の結果から 30 エポック」を試し、mAP が上がらなければ YOLO26n からやり直します
+
+### ラベル付けを楽にする（推論の結果を取り込む）
+1. 新しい画像を、今のモデルで**推論**する
+2. 推論結果の画面で、取り込む画像にチェックを入れ、データセットを選んで「取り込む」
+3. ラベル付け画面で、**間違った枠だけ**直す
+4. 前回の学習結果を出発点にして学習する
+
+全部の枠を手で描かなくて済みます。取り込み先のデータセットのクラス名は、モデルのクラス名と同じである必要があります（未登録なら自動で登録します）。
+
+---
+
+## 8. うまくいかないとき
+
+| 症状 | 原因と対処 |
+|---|---|
+| 学習が `No labels found` で止まる | 画像に対応するラベル（同じ名前の `.txt`）がありません。ラベル付け画面で枠を付けるか、ラベルをアップロードしてください |
+| 「学習を開始」が押せない | データセット画面の赤いメッセージ（クラス名未登録、ラベルなし、画像が 2 枚未満など）を確認します |
+| 「ほかの処理が実行中です」 | 学習・書き出し・動画推論は同時に 1 つだけです。上部の青いバナーから実行中のものを確認して、終わるのを待つか停止します |
+| 学習中に落ちた（メモリ不足など） | バッチサイズを下げる（8 → 4）、画像サイズを下げる（640 → 480）、水増し枚数を減らす、のどれかを試します。学習画面に「再開」が出ていれば、続きから再開もできます |
+| 「ページの有効期限が切れました」 | ページを再読み込みしてからやり直します |
+| アップロードで一部がスキップされる | 画面に理由が出ます（壊れた画像、0〜1 の範囲外のラベル、対象外の形式など）。ファイルを直して、その分だけ入れ直します |
+| 検証用の画像が学習用と同じ | 「自動で分け直す」にチェックを入れて学習すると、重ならないように振り分け直されます |
+| 動画推論の結果が再生できない | ffmpeg がないと、ブラウザで再生できない形式で保存されます。ダウンロードして再生するか、ffmpeg を入れてください |
+| 書き出し（ONNX など）が時間がかかる | 初回は必要なライブラリを自動で入れるためです。しばらく待ちます |
+| `localhost:5000` が開かない | 黒い画面が閉じていないか確認します。ポートが使用中なら、環境変数 `PORT` で別の番号にします |
+| 画面を閉じてしまった | 学習は裏で動き続けます。トップ画面の「学習の履歴」から戻れます（黒い画面を閉じていなければ） |
+
+---
+
+## 9. コマンドラインで使う
+
+Web アプリを使わずに、バッチファイルやコマンドで学習することもできます。
+
+| ファイル | 内容 |
+|---|---|
+| `train.bat [データセット] [オプション]` | 学習（例：`train.bat datasets\my_dataset --epochs 100`） |
+| `predict.bat <画像または動画> [モデル]` | 推論（ドラッグ＆ドロップでも可）。結果は `runs\predict\` に保存 |
+
+`scripts/main.py` の主なオプション：
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `--data-dir` | | ローカルのデータセットフォルダ（`train/` と `valid/` を持つ） |
+| `--dataset` | | Kaggle のデータセット名（`--data-dir` とどちらか一方） |
+| `--model` | `yolo26n.pt` | ベースモデル |
+| `--weights` | | 追加学習の出発点にする `.pt` |
+| `--epochs` / `--imgsz` / `--batch` | 60 / 512 / 32（`train.bat` は 640 / 8） | 学習の設定 |
+| `--device` | `auto` | GPU があれば GPU、なければ CPU |
+| `--resume` | | 途中で止まった学習を再開 |
+| `--preprocess` | | 学習前にデータを掃除して水増し（**データのフォルダを書き換えます**） |
+| `--export-ncnn` | | 学習後に NCNN 形式でも書き出す |
+
+---
+
+## 10. フォルダ構成
+
+```
+yolo-training-template/
+├── run_webapp.bat        Web アプリの起動
+├── setup.bat             環境構築
+├── train.bat / predict.bat  コマンドラインでの学習・推論
+├── requirements.txt
+├── webapp/               Flask アプリ
+│   ├── app.py              画面と API
+│   ├── dataset_store.py    データの取り込み・ラベル・検証
+│   ├── params.py           入力欄とその上限
+│   ├── augment.py          事前の水増し
+│   ├── train_worker.py     学習などを実行する子プロセス
+│   ├── jobs.py             実行中の処理の管理（同時に 1 つ）
+│   ├── predictor.py        画像の推論
+│   ├── runmeta.py          状態ファイルの読み書き
+│   ├── templates/ static/  画面
+├── scripts/              コマンドライン用スクリプト（main.py など）
+├── tests/                テスト
+├── datasets/             データセット（Git には入れない）
+└── runs/                 学習結果 train/・推論結果 predict/（Git には入れない）
+```
+
+---
+
+## 11. 注意点
+
+- **この PC 専用です**：Web アプリにはログイン機能がありません。そのため `127.0.0.1`（この PC）からだけ接続できるようにしています。`app.py` の `host` を `0.0.0.0` などに変えて他の端末から使えるようにすると、同じネットワークの誰でも、データの削除や学習の開始ができてしまいます。共有したい場合は、先に認証を追加してください
+- **CPU での学習は時間がかかります**：画像数百枚 × 50 エポックで、数十分〜数時間です。まず YOLO26n で試してください。GPU を使いたい場合は、`setup.bat` が NVIDIA GPU を検出して GPU 版の PyTorch を入れます
+- **同時に動かせる重い処理は 1 つ**：学習・書き出し・動画の推論は、同時に 1 つだけです
+- **削除は元に戻せません**：データセットと学習結果の削除には、確認のために名前の入力が必要です。データセットを消しても学習結果は残ります
+- **`--preprocess`（コマンドライン）はデータを書き換えます**：Web アプリの水増し B は、元のデータを書き換えません
+- **日本語のパス**：このフォルダのように日本語を含むパスでも動くように直してあります
+- **多角形のラベル**：このアプリは物体検出用です。多角形は枠に変換して取り込むため、セグメンテーションの学習はできません
+- `groundingdino-py`（自動ラベル付け用）は Windows ではビルドが難しいので、`setup.bat` では入れていません
+
+---
+
+## 12. テスト
+
+```
+.venv\Scripts\python tests\test_ingest.py        アップロード処理（数秒）
+.venv\Scripts\python tests\test_webapp_e2e.py    通しテスト（CPU で学習するので数分）
+```
+
+通しテストは、アップロード・入力チェック・学習・推論・書き出し・動画・停止と再開を実際に動かして確認します。失敗があると終了コード 1 で終わり、テストで作ったデータは最後に自動で削除します。
+
+---
+
+## 13. 元のテンプレートからの変更点
+
+- Flask 製の Web アプリ（`webapp/`）を追加
+- `scripts/main.py`
+  - `--data-dir` でローカルのデータセットを指定できるようにした
+  - 既定のモデルを YOLO26n にし、`--device auto` で GPU がなければ CPU に切り替える
+  - 結果の保存先がリポジトリの外になり、`--resume` や NCNN の書き出しが `best.pt` を見つけられなかった問題を修正
+  - 完了済みの学習への `--resume` を正しく案内するようにした
+- `scripts/preprocessing.py`
+  - 日本語を含むパスで画像を読めず、「壊れた画像」として**削除してしまう**問題を修正
+  - albumentations 2.x に合わせてノイズの設定を修正
+- `requirements.txt`：`albumentations>=2.0.0,<3`、`flask` を追加
+- `.gitignore`：`*.pt` が無視されていなかった問題を修正。`datasets/` の中身も Git に入れないようにした
+- `setup.bat` / `train.bat` / `predict.bat` / `run_webapp.bat` / `tests/` を追加

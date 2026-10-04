@@ -1,0 +1,168 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1d2330;
+  --muted: #677084;
+  --line: #dfe3ea;
+  --accent: #2f6fde;
+  --accent-soft: #e7effd;
+  --ok: #1f8a4c;
+  --ok-soft: #e3f4ea;
+  --warn: #a86400;
+  --warn-soft: #fdf1dc;
+  --err: #c0362c;
+  --err-soft: #fbe6e4;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 1.5rem; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+h3 { font-size: 1rem; margin: 16px 0 8px; }
+code { background: #eef1f5; padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+
+.topbar {
+  background: #1d2330;
+  color: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 52px;
+}
+.topbar .brand { font-weight: 700; color: #fff; }
+.topbar nav a { color: #c9d1e0; margin-right: 18px; }
+.topbar nav a:hover, .topbar nav a.active { color: #fff; text-decoration: none; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+.wide main, main.wide { max-width: none; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+
+.flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; }
+.flash.success { background: var(--ok-soft); color: var(--ok); }
+.flash.warning { background: var(--warn-soft); color: var(--warn); }
+.flash.error { background: var(--err-soft); color: var(--err); }
+.banner {
+  background: var(--accent-soft);
+  border: 1px solid #c7d8f8;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.btn {
+  display: inline-block;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:hover { filter: brightness(1.08); text-decoration: none; }
+.btn.secondary { background: #fff; color: var(--accent); }
+.btn.danger { background: var(--err); border-color: var(--err); }
+.btn.small { padding: 4px 10px; font-size: .85rem; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+label { font-weight: 600; display: block; margin-bottom: 4px; }
+input[type=text], input[type=number], select, textarea {
+  font: inherit;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  width: 100%;
+}
+input:invalid { border-color: var(--err); }
+textarea { min-height: 120px; font-family: Consolas, "Yu Gothic", monospace; }
+.field { margin-bottom: 14px; }
+.field .help { color: var(--muted); font-size: .82rem; margin-top: 2px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 18px; }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.check input { width: auto; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 0 0 16px; }
+legend { font-weight: 700; padding: 0 6px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+.stat .v { font-size: 1.4rem; font-weight: 700; }
+.stat .k { color: var(--muted); font-size: .82rem; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+
+.badge { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: .8rem; font-weight: 600; background: #eceff4; color: var(--muted); }
+.badge.running { background: var(--accent-soft); color: var(--accent); }
+.badge.finished { background: var(--ok-soft); color: var(--ok); }
+.badge.failed { background: var(--err-soft); color: var(--err); }
+.badge.stopped, .badge.interrupted { background: var(--warn-soft); color: var(--warn); }
+
+.progress { height: 10px; background: #e6e9ef; border-radius: 99px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); transition: width .4s; }
+
+.dropzone {
+  border: 2px dashed #b9c3d3;
+  border-radius: var(--radius);
+  padding: 28px;
+  text-align: center;
+  background: #fafbfd;
+  cursor: pointer;
+}
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-items: start; }
+.thumb { position: relative; border-radius: 6px; overflow: hidden; background: #e9edf2; display: block; }
+.thumb img { display: block; width: 100%; height: auto; }
+.thumb .box { position: absolute; border: 2px solid; pointer-events: none; }
+.thumb .tag { position: absolute; left: 4px; top: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: .72rem; padding: 0 6px; border-radius: 4px; }
+
+.list-plain { margin: 0; padding-left: 20px; }
+pre.log {
+  background: #12161f;
+  color: #cfd6e4;
+  padding: 12px;
+  border-radius: 8px;
+  max-height: 360px;
+  overflow: auto;
+  font-size: .78rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.danger-zone { border-color: #f0c4bf; }
+.chart { width: 100%; height: 220px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+.aug-table td { vertical-align: middle; }
+.aug-table input { max-width: 110px; }
+.presets .btn { margin-right: 6px; }
+
+@media (max-width: 640px) {
+  .topbar { padding: 0 12px; gap: 12px; }
+  .topbar nav a { margin-right: 10px; }
+  main { padding: 16px 12px 48px; }
+}

@@ -16,6 +16,21 @@ from PIL import Image
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
+def imread_unicode(path):
+    """Read an image, supporting non-ASCII paths on Windows."""
+    data = np.fromfile(str(path), dtype=np.uint8)
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+def imwrite_unicode(path, image):
+    """Write an image, supporting non-ASCII paths on Windows."""
+    ok, buf = cv2.imencode(Path(path).suffix or '.jpg', image)
+    if ok:
+        buf.tofile(str(path))
+    return ok
+
 class YOLODataPreprocessor:
     """
     Preprocessing pipeline for YOLO datasets with cleaning and augmentation.
@@ -60,7 +75,7 @@ class YOLODataPreprocessor:
         }
 
         if config_path and os.path.exists(config_path):
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 user_config = yaml.safe_load(f)
             # Merge user config with defaults
             self._merge_configs(default_config, user_config)
@@ -107,8 +122,10 @@ class YOLODataPreprocessor:
             ))
 
         if aug_config.get('gaussian_noise', {}).get('p', 0) > 0:
+            # albumentations 2.x takes std as a fraction of 255, not variance
+            var_low, var_high = aug_config['gaussian_noise']['var_limit']
             transforms.append(A.GaussNoise(
-                var_limit=aug_config['gaussian_noise']['var_limit'],
+                std_range=(var_low ** 0.5 / 255, var_high ** 0.5 / 255),
                 p=aug_config['gaussian_noise']['p']
             ))
 
@@ -163,7 +180,7 @@ class YOLODataPreprocessor:
             if self.config['cleaning']['remove_corrupted_images'] or \
                (self.config['cleaning']['validate_annotations'] and self.config['cleaning']['check_bbox_validity']):
                 try:
-                    img = cv2.imread(str(image_file))
+                    img = imread_unicode(image_file)
                     if img is None:
                         logging.warning(f"Removing corrupted image: {image_file}")
                         os.remove(image_file)
@@ -273,7 +290,7 @@ class YOLODataPreprocessor:
             label_file = labels_path / f"{image_file.stem}.txt"
 
             # Read image
-            image = cv2.imread(str(image_file))
+            image = imread_unicode(image_file)
             if image is None:
                 continue
 
@@ -309,7 +326,7 @@ class YOLODataPreprocessor:
                 output_image_name = f"{image_file.stem}_aug_{i}{image_file.suffix}"
                 output_image_path = os.path.join(output_images_dir, output_image_name)
                 augmented_image_bgr = cv2.cvtColor(augmented_image, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(output_image_path, augmented_image_bgr)
+                imwrite_unicode(output_image_path, augmented_image_bgr)
 
                 # Save augmented labels
                 output_label_name = f"{image_file.stem}_aug_{i}.txt"
