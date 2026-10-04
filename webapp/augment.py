@@ -14,7 +14,7 @@ import random
 import albumentations as A
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 import dataset_store
 
@@ -168,12 +168,37 @@ def _color(class_id):
     return tuple(rng.randint(60, 255) for _ in range(3))
 
 
+_FONT_CANDIDATES = [
+    r'C:\Windows\Fonts\YuGothM.ttc', r'C:\Windows\Fonts\meiryo.ttc',
+    r'C:\Windows\Fonts\msgothic.ttc', r'C:\Windows\Fonts\arial.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    '/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',
+]
+_font_cache = {}
+
+
+def _label_font(size):
+    """A font that can draw Japanese class names (default font cannot)."""
+    if size not in _font_cache:
+        font = None
+        for path in _FONT_CANDIDATES:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, size)
+                    break
+                except OSError:
+                    continue
+        _font_cache[size] = font or ImageFont.load_default()
+    return _font_cache[size]
+
+
 def draw_boxes(array, boxes, classes, names):
     """Draw YOLO boxes on an RGB array and return a PIL image."""
     img = Image.fromarray(array)
     draw = ImageDraw.Draw(img)
     w, h = img.size
     line = max(2, round(min(w, h) / 200))
+    font = _label_font(max(12, round(min(w, h) / 25)))
     for class_id, (cx, cy, bw, bh) in zip(classes, boxes):
         x0, y0 = (cx - bw / 2) * w, (cy - bh / 2) * h
         x1, y1 = (cx + bw / 2) * w, (cy + bh / 2) * h
@@ -181,7 +206,13 @@ def draw_boxes(array, boxes, classes, names):
         draw.rectangle([x0, y0, x1, y1], outline=color, width=line)
         label = names[int(class_id)] if int(class_id) < len(names) \
             else str(class_id)
-        draw.text((x0 + line, max(0, y0 - 12)), label, fill=color)
+        left, top, right, bottom = draw.textbbox((0, 0), label, font=font)
+        text_h = bottom - top
+        ty = max(0, y0 - text_h - line)
+        draw.rectangle([x0, ty, x0 + (right - left) + 2 * line,
+                        ty + text_h + line], fill=color)
+        draw.text((x0 + line, ty - top), label, fill=(255, 255, 255),
+                  font=font)
     return img
 
 
